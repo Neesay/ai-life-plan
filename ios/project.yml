@@ -1,0 +1,54 @@
+name: Accountable
+options:
+  bundleIdPrefix: app.accountability
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+targets:
+  Accountable:
+    type: application
+    platform: iOS
+    sources:
+      - path: Accountable
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.accountability.alarms
+        PRODUCT_NAME: Accountable
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_FILE: Accountable/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: ""
+        DEVELOPMENT_TEAM: ""
+    info:
+      path: Accountable/Info.plist
+      properties:
+        CFBundleDisplayName: Accountable
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSAlarmKitUsageDescription: "Your plan rings as full-screen alarms so you can't miss a block."
+        NSLocationWhenInUseUsageDescription: "Used to log when you arrive at uni, the gym or home."
+        NSLocationAlwaysAndWhenInUseUsageDescription: "Logs arrivals at uni, the gym and home in the background so your planner knows where you are."
+        NSSupportsLiveActivities: true
+        UIBackgroundModes: [fetch, processing]
+        BGTaskSchedulerPermittedIdentifiers: [app.accountability.alarms.refresh]
+        CFBundleURLTypes:
+          - CFBundleURLName: app.accountability.alarms
+            CFBundleURLSchemes: [accountable]
+    scheme:
+      testTargets: []

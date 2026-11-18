@@ -1,0 +1,25 @@
+name: Rules tick
+
+# Vercel Hobby crons only run daily, so GitHub pokes the rules engine every ~10 min.
+# GitHub may delay scheduled runs by a few minutes; that's fine.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: POST /api/tick
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+        run: |
+          if [ -z "$API_URL" ] || [ -z "$API_TOKEN" ]; then
+            echo "API_URL / API_TOKEN repo secrets not set yet; skipping."
+            exit 0
+          fi
+          curl -fsS --max-time 60 -X POST "${API_URL%/}/api/tick" -H "Authorization: Bearer $API_TOKEN"
+          echo
