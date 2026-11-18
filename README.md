@@ -43,7 +43,7 @@ Check-ins are written to an on-disk queue before any network call, with a `clien
 
 ```
 npm install
-npm test          # 39 tests, no database needed (PGlite)
+npm test          # 50 tests, no database needed (PGlite)
 npm run typecheck
 npm run gen-token # make API_TOKEN / MCP_KEY values
 ```

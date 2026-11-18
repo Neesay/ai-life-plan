@@ -17,7 +17,7 @@ import {
   type Rule,
   updateBlock,
 } from './store.js';
-import { formatLondon, londonDate, MIN, startOfDay } from './time.js';
+import { atLondon, formatLondon, londonDate, MIN, startOfDay } from './time.js';
 
 const isActive = (b: Block) => (ACTIVE_STATUSES as readonly string[]).includes(b.status);
 
@@ -69,7 +69,7 @@ export async function applyEvent(db: Db, now: Date, e: EventRow): Promise<string
 }
 
 /** Minutes spent in distraction apps between from and until, from app_open/app_close pairs. */
-export function distractionMinutes(events: EventRow[], until: Date, kinds?: string[]): number {
+export function distractionMinutes(events: EventRow[], until: Date, kinds?: string[], exclude: (readonly [number, number])[] = []): number {
   const relevant = events
     .filter((e) => (e.type === 'app_open' || e.type === 'app_close') && isDistraction(e, kinds))
     .sort((a, b) => a.ts.localeCompare(b.ts));
@@ -78,6 +78,7 @@ export function distractionMinutes(events: EventRow[], until: Date, kinds?: stri
     const e = relevant[i];
     if (e.type !== 'app_open') continue;
     const start = new Date(e.ts).getTime();
+    if (exclude.some(([s, x]) => start >= s && start < x)) continue;
     let end = Math.min(start + 30 * MIN, until.getTime()); // no close seen: assume 30 min
     for (let j = i + 1; j < relevant.length; j++) {
       const n = relevant[j];
@@ -110,6 +111,7 @@ async function ruleAlarm(db: Db, now: Date, rule: Rule, label: string, note: str
     end_at: new Date(start.getTime() + 5 * MIN),
     alarm_offsets_min: [0],
     alarm_label: label.slice(0, 80),
+    alert: rule.action.alert === 'notification' ? 'notification' : 'alarm',
     source: 'rule',
     notes: blockId ? `rule ${rule.name} for block ${blockId}` : `rule ${rule.name}`,
   });
@@ -178,6 +180,33 @@ export async function tick(db: Db, now: Date): Promise<TickResult> {
     }
   }
 
+  // 2b. Games outside a play block (friend time) → stop.
+  const solo = rules.get('solo_gaming');
+  if (solo) {
+    const kinds: string[] = solo.condition.kinds ?? ['game'];
+    const cooldown = Number(solo.condition.cooldown_min ?? 15);
+    const maxAge = Number(solo.condition.max_age_min ?? 60);
+    const focusCats: string[] = distraction?.condition.categories ?? ['work', 'uni'];
+    const opens = await listEvents(db, { since: new Date(now.getTime() - maxAge * MIN), until: new Date(now.getTime() + MIN), types: ['app_open'] });
+    for (const e of opens.filter((e) => isDistraction(e, kinds))) {
+      const ts = new Date(e.ts);
+      const covering = (await listBlocks(db, ts, new Date(ts.getTime() + 1))).filter((b) => b.status !== 'skipped');
+      if (covering.some((b) => b.category === 'play')) continue; // friend time: allowed
+      if (distraction && covering.some((b) => focusCats.includes(b.category))) continue; // distraction rule covers it
+      const day = londonDate(ts);
+      const last = await lastFiring(db, solo.name, `${day}:`);
+      if (last && now.getTime() - last.getTime() < cooldown * MIN) {
+        await claimFiring(db, now, solo.name, `${day}:${e.id}:suppressed`);
+        continue;
+      }
+      if (!(await claimFiring(db, now, solo.name, `${day}:${e.id}`))) continue;
+      const app = String(e.payload?.app ?? 'a game');
+      const label = fill(String(solo.action.label ?? 'STOP — NO SOLO GAMING'), { app });
+      await ruleAlarm(db, now, solo, label, `Opened ${app} outside friend time`);
+      actions.push(`solo gaming: ${app}`);
+    }
+  }
+
   // 3. No check-in after the alarm → missed.
   const missed = rules.get('no_checkin_missed');
   if (missed) {
@@ -207,12 +236,35 @@ export async function tick(db: Db, now: Date): Promise<TickResult> {
   if (play) {
     const limit = Number(play.condition.limit_min ?? 120);
     const day = londonDate(now);
-    const events = await listEvents(db, { since: startOfDay(day), until: now, types: ['app_open', 'app_close'] });
-    const used = distractionMinutes(events, now, play.condition.kinds);
+    const events = await listEvents(db, { since: startOfDay(day), until: new Date(now.getTime() + 1000), types: ['app_open', 'app_close'] });
+    const exclude = play.condition.exclude_play_blocks
+      ? (await listBlocks(db, startOfDay(day), now))
+          .filter((b) => b.category === 'play' && b.status !== 'skipped')
+          .map((b) => [new Date(b.start_at).getTime(), new Date(b.end_at).getTime()] as const)
+      : [];
+    const used = distractionMinutes(events, now, play.condition.kinds, exclude);
     if (used > limit && (await claimFiring(db, now, play.name, day))) {
       const label = String(play.action.label ?? 'PLAY LIMIT HIT');
       await ruleAlarm(db, now, play, label, `${used} min of games/social today (limit ${limit})`);
       actions.push(`play limit: ${used}/${limit} min`);
+    }
+  }
+
+  // 5. Daily steps goal, checked in the evening from the latest 'steps' event.
+  const steps = rules.get('steps_goal');
+  if (steps) {
+    const goal = Number(steps.condition.goal ?? 10000);
+    const day = londonDate(now);
+    const after = atLondon(day, String(steps.condition.after ?? '20:30'));
+    if (now >= after) {
+      const today = await listEvents(db, { since: startOfDay(day), until: new Date(now.getTime() + 1000), types: ['steps'] });
+      const count = Math.max(0, ...today.map((e) => Number(e.payload?.count ?? 0)).filter(Number.isFinite));
+      if (today.length > 0 && count < goal && (await claimFiring(db, now, steps.name, day))) {
+        const short = (goal - count).toLocaleString('en-GB');
+        const label = fill(String(steps.action.label ?? 'WALK — {short} STEPS TO GO'), { short });
+        await ruleAlarm(db, now, steps, label, `${count} steps today (goal ${goal})`);
+        actions.push(`steps: ${count}/${goal}`);
+      }
     }
   }
 

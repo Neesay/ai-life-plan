@@ -22,6 +22,8 @@ export const SCHEMA: string[] = [
     CHECK (end_at > start_at)
   )`,
   `CREATE INDEX IF NOT EXISTS blocks_start_idx ON blocks (start_at)`,
+  `ALTER TABLE blocks ADD COLUMN IF NOT EXISTS alert TEXT NOT NULL DEFAULT 'alarm'`,
+  `ALTER TABLE blocks ADD COLUMN IF NOT EXISTS quiet BOOLEAN NOT NULL DEFAULT false`,
   `CREATE TABLE IF NOT EXISTS events (
     id TEXT PRIMARY KEY,
     ts TIMESTAMPTZ NOT NULL,
@@ -84,8 +86,18 @@ export const DEFAULT_RULES: { name: string; condition: object; action: object }[
     action: {},
   },
   {
+    name: 'solo_gaming',
+    condition: { kinds: ['game'], cooldown_min: 15, max_age_min: 60 },
+    action: { alarm_in_min: 1, label: 'STOP — NO SOLO GAMING' },
+  },
+  {
+    name: 'steps_goal',
+    condition: { goal: 10000, after: '20:30' },
+    action: { alarm_in_min: 1, label: 'WALK — {short} STEPS TO GO', alert: 'notification' },
+  },
+  {
     name: 'play_limit',
-    condition: { limit_min: 120 },
+    condition: { limit_min: 120, exclude_play_blocks: true },
     action: { alarm_in_min: 1, label: 'PLAY LIMIT HIT — PUT IT DOWN' },
   },
 ];

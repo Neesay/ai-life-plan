@@ -93,6 +93,34 @@ Duplicate it for **Is Snoozed** with `"action": "snoozed"`.
 
 > iOS may only fire this trigger for Clock-app alarms, not AlarmKit ones. That's fine: the app's own On it / +15 buttons are the main log, and this one is only a backup.
 
+## 5. Daily steps → `steps` (10k goal)
+
+**Trigger:** Time of Day → `20:35` → Daily → Run Immediately.
+
+**Actions**, in this order:
+1. **Find Health Samples**:
+   - Type: **Steps**
+   - Start Date **is today**
+2. **Calculate Statistics** → **Sum** of the Health Samples.
+3. **Round Number**: round the statistics result.
+4. **Get Contents of URL**: POST to `/api/events` with this JSON body:
+
+| Key | Type | Value |
+|---|---|---|
+| `type` | Text | `steps` |
+| `source` | Text | `shortcut` |
+| `payload` | Dictionary | `count` (Number) = the **Rounded Number** variable |
+
+```json
+{ "type": "steps", "source": "shortcut", "payload": { "count": 7421 } }
+```
+
+**What it triggers:** if you're under 10,000 steps, a quiet notification says how many are left, for example *"WALK — 2,579 STEPS TO GO"*. Claude also sees `steps_by_day` in the weekly summary.
+
+The first run asks for permission to read your step count. Allow it.
+
+> You can also add a second copy at 18:00. The server only nudges after 20:30, but Claude's 21:00 check-in will see the earlier number too.
+
 ---
 
 ## Quick test

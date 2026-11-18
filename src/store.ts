@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Db } from './db.js';
 import { HttpError } from './http.js';
-import type { Category, EventInput, Status, TemplateItem } from './model.js';
+import type { Alert, Category, EventInput, Status, TemplateItem } from './model.js';
 import { formatLondon, parseTime, toIso } from './time.js';
 
 // ---------- blocks ----------
@@ -17,6 +17,8 @@ export interface Block {
   alarm_offsets_min: number[];
   alarm_label: string;
   required_place: string | null;
+  alert: Alert;
+  quiet: boolean;
   status: Status;
   source: string;
   notes: string | null;
@@ -38,6 +40,8 @@ function mapBlock(r: any): Block {
     alarm_offsets_min: Array.isArray(r.alarm_offsets_min) ? r.alarm_offsets_min : JSON.parse(r.alarm_offsets_min ?? '[]'),
     alarm_label: r.alarm_label,
     required_place: r.required_place ?? null,
+    alert: r.alert ?? 'alarm',
+    quiet: !!r.quiet,
     status: r.status,
     source: r.source,
     notes: r.notes ?? null,
@@ -54,6 +58,8 @@ export interface NewBlock {
   alarm_offsets_min?: number[];
   alarm_label?: string;
   required_place?: string | null;
+  alert?: Alert;
+  quiet?: boolean;
   status?: Status;
   source?: string;
   notes?: string | null;
@@ -66,8 +72,8 @@ export function defaultLabel(title: string): string {
 export async function insertBlock(db: Db, now: Date, b: NewBlock): Promise<Block> {
   if (b.end_at <= b.start_at) throw new HttpError(400, 'end must be after start');
   const rows = await db.query(
-    `INSERT INTO blocks (id, title, category, start_at, end_at, alarm_offsets_min, alarm_label, required_place, status, source, notes, created_at, updated_at)
-     VALUES ($1,$2,$3,$4::timestamptz,$5::timestamptz,$6::jsonb,$7,$8,$9,$10,$11,$12::timestamptz,$12::timestamptz)
+    `INSERT INTO blocks (id, title, category, start_at, end_at, alarm_offsets_min, alarm_label, required_place, status, source, notes, created_at, updated_at, alert, quiet)
+     VALUES ($1,$2,$3,$4::timestamptz,$5::timestamptz,$6::jsonb,$7,$8,$9,$10,$11,$12::timestamptz,$12::timestamptz,$13,$14)
      RETURNING *`,
     [
       randomUUID(),
@@ -82,6 +88,8 @@ export async function insertBlock(db: Db, now: Date, b: NewBlock): Promise<Block
       b.source ?? 'claude',
       b.notes ?? null,
       now.toISOString(),
+      b.alert ?? 'alarm',
+      b.quiet ?? false,
     ],
   );
   return mapBlock(rows[0]);
@@ -124,6 +132,8 @@ export async function updateBlock(db: Db, now: Date, id: string, patch: BlockPat
   if (patch.alarm_label !== undefined) add('alarm_label', patch.alarm_label);
   if (patch.required_place !== undefined) add('required_place', patch.required_place);
   if (patch.status !== undefined) add('status', patch.status);
+  if (patch.alert !== undefined) add('alert', patch.alert);
+  if (patch.quiet !== undefined) add('quiet', patch.quiet);
   if (patch.notes !== undefined) add('notes', patch.notes);
   if (sets.length === 0) return current;
   add('updated_at', now.toISOString(), '::timestamptz');

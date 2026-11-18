@@ -1,6 +1,7 @@
 import AlarmKit
 import Foundation
 import SwiftUI
+import UserNotifications
 
 struct BlockAlarmMetadata: AlarmMetadata {
     var blockId: String
@@ -61,7 +62,7 @@ enum AlarmScheduler {
     @discardableResult
     static func reconcile(with server: [AlarmSpec]) async throws -> Int {
         let pinned = activePinned()
-        let wanted = Dictionary(server.compactMap { spec in
+        let wanted = Dictionary(server.filter(\.isAlarm).compactMap { spec in
             UUID(uuidString: spec.id).map { ($0, spec) }
         }, uniquingKeysWith: { first, _ in first })
         let existing = try AlarmManager.shared.alarms
@@ -84,6 +85,8 @@ enum AlarmScheduler {
             guard let id = UUID(uuidString: spec.id), id != except else { continue }
             try? AlarmManager.shared.cancel(id: id)
         }
+        let notificationIds = cached.filter { $0.blockId == blockId }.map { NotificationScheduler.serverPrefix + $0.id }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: notificationIds)
     }
 
     // MARK: Local-only alarms

@@ -14,6 +14,8 @@ struct Block: Codable, Identifiable, Hashable {
     let status: String
     let source: String
     let version: Int
+    let alert: String?
+    let quiet: Bool?
 
     var isActive: Bool { status == "planned" || status == "moved" }
 }
@@ -29,6 +31,12 @@ struct AlarmSpec: Codable, Identifiable, Hashable {
     let fireLocal: String
     let label: String
     let category: String
+    /// "alarm" (AlarmKit, breaks Silent) or "notification" (obeys Silent). Missing = alarm.
+    let alert: String?
+    /// True when a quiet block (lecture, meeting) downgraded this alarm to a notification.
+    let quieted: Bool?
+
+    var isAlarm: Bool { (alert ?? "alarm") == "alarm" }
 }
 
 struct ScheduleResponse: Codable {

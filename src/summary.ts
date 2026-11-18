@@ -41,6 +41,11 @@ export async function summary(db: Db, now: Date, from: Date, to: Date) {
   }
 
   const checkins = events.filter((e) => e.type === 'checkin');
+  const stepsByDay: Record<string, number> = {};
+  for (const e of events.filter((e) => e.type === 'steps')) {
+    const d = londonDate(new Date(e.ts));
+    stepsByDay[d] = Math.max(stepsByDay[d] ?? 0, Number(e.payload?.count ?? 0) || 0);
+  }
   return {
     from_local: formatLondon(from),
     to_local: formatLondon(to),
@@ -51,6 +56,7 @@ export async function summary(db: Db, now: Date, from: Date, to: Date) {
     distraction_minutes_total: distractionMinutes(events, to < now ? to : now),
     distraction_minutes_by_app: appMinutes,
     place_visits: visits,
+    steps_by_day: stepsByDay,
     checkins: {
       total: checkins.length,
       on_it: checkins.filter((c) => c.payload?.action === 'on_it').length,
@@ -72,6 +78,7 @@ export async function today(db: Db, now: Date) {
   const next = real.find((b) => new Date(b.start_at) > now) ?? null;
   const events = await listEvents(db, { since: from, until: to, types: ['app_open', 'app_close'] });
   const lastSync = await lastEvent(db, 'sync');
+  const stepEvents = await listEvents(db, { since: from, until: to, types: ['steps'] });
   const counts: Record<string, number> = {};
   for (const b of real) counts[b.status] = (counts[b.status] ?? 0) + 1;
   return {
@@ -82,6 +89,7 @@ export async function today(db: Db, now: Date) {
     blocks,
     counts,
     distraction_minutes_today: distractionMinutes(events, now),
+    steps_today: stepEvents.length ? Math.max(...stepEvents.map((e) => Number(e.payload?.count ?? 0) || 0)) : null,
     last_phone_sync: lastSync ? { ts_local: lastSync.ts_local, minutes_ago: Math.round((now.getTime() - new Date(lastSync.ts).getTime()) / MIN) } : null,
     notes_today: await listNotes(db, from),
   };

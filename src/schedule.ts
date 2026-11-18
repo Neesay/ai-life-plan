@@ -16,6 +16,10 @@ export interface AlarmSpec {
   fire_local: string;
   label: string;
   category: string;
+  /** 'alarm' = AlarmKit full-screen; 'notification' = ordinary notification that obeys Silent. */
+  alert: 'alarm' | 'notification';
+  /** True when a quiet block (lecture, meeting) turned this alarm into a notification. */
+  quieted: boolean;
 }
 
 /** Hash a string into an RFC-4122-shaped UUID (v5-style bits) so the phone can use it as an AlarmKit id. */
@@ -36,16 +40,23 @@ export function alarmLabel(block: Pick<Block, 'alarm_label'>, offset: number): s
 /** Every future alarm for active blocks, fire_at in (now, until]. */
 export function computeAlarms(blocks: Block[], now: Date, until: Date): AlarmSpec[] {
   const out: AlarmSpec[] = [];
+  const quietWindows = blocks
+    .filter((b) => b.quiet && b.status !== 'skipped')
+    .map((b) => [new Date(b.start_at).getTime(), new Date(b.end_at).getTime()] as const);
+  const inQuiet = (t: number) => quietWindows.some(([s, e]) => t >= s && t < e);
   for (const b of blocks) {
     if (!(ACTIVE_STATUSES as readonly string[]).includes(b.status)) continue;
+    if (b.alert === 'none') continue;
     const start = new Date(b.start_at).getTime();
     for (const off of new Set(b.alarm_offsets_min)) {
       const fire = new Date(start + off * MIN);
       if (fire <= now || fire > until) continue;
       const label = alarmLabel(b, off);
       const key = `${b.id}:${off}`;
+      const quieted = b.alert === 'alarm' && inQuiet(fire.getTime());
+      const alert = b.alert === 'alarm' && !quieted ? 'alarm' : 'notification';
       out.push({
-        id: stableUuid(`${key}|${fire.toISOString()}|${label}`),
+        id: stableUuid(`${key}|${fire.toISOString()}|${label}|${alert}`),
         key,
         block_id: b.id,
         offset_min: off,
@@ -53,6 +64,8 @@ export function computeAlarms(blocks: Block[], now: Date, until: Date): AlarmSpe
         fire_local: formatLondon(fire),
         label,
         category: b.category,
+        alert,
+        quieted,
       });
     }
   }
@@ -98,6 +111,8 @@ export async function materialize(db: Db, now: Date, days = MATERIALIZE_DAYS): P
         alarm_offsets_min: item.alarm_offsets_min ?? [-10, 0],
         alarm_label: item.alarm_label,
         required_place: item.required_place ?? null,
+        alert: item.alert,
+        quiet: item.quiet,
         source: 'template',
       });
       created++;

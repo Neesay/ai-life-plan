@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { HttpError, type Ctx } from './http.js';
-import { CATEGORIES, EVENT_TYPES, offsetsSchema, STATUSES, templateItem, timeString } from './model.js';
+import { alertSchema, CATEGORIES, EVENT_TYPES, offsetsSchema, quietSchema, STATUSES, templateItem, timeString } from './model.js';
 import { tick } from './rules.js';
 import { getWeekTemplate, materialize, scheduleSnapshot, setWeekTemplate } from './schedule.js';
 import {
@@ -38,6 +38,8 @@ const blockFields = {
   alarm_label: z.string().min(1).max(80).optional().describe('Text shown full-screen on the alarm, e.g. "GO GYM". Defaults to the title in caps.'),
   required_place: z.string().max(60).nullish().describe('Place id (see list_places). If set, arriving there marks the block done; not arriving triggers the late rule.'),
   notes: z.string().max(1000).nullish(),
+  alert: alertSchema.optional(),
+  quiet: quietSchema.optional(),
 };
 
 async function maybeTime(s: string | undefined) {
@@ -84,6 +86,8 @@ export const TOOLS: Tool[] = [
         alarm_label: a.alarm_label,
         required_place: a.required_place ?? null,
         notes: a.notes ?? null,
+        alert: a.alert,
+        quiet: a.quiet,
         source: 'claude',
       }),
   }),
@@ -101,6 +105,8 @@ export const TOOLS: Tool[] = [
       required_place: blockFields.required_place,
       status: z.enum(STATUSES).optional(),
       notes: blockFields.notes,
+      alert: blockFields.alert,
+      quiet: blockFields.quiet,
     }),
     run: async (a, ctx) => {
       const patch: BlockPatch = {
@@ -113,6 +119,8 @@ export const TOOLS: Tool[] = [
         required_place: a.required_place,
         status: a.status,
         notes: a.notes,
+        alert: a.alert,
+        quiet: a.quiet,
       };
       for (const k of Object.keys(patch) as (keyof BlockPatch)[]) if (patch[k] === undefined) delete patch[k];
       return updateBlock(ctx.db, ctx.now(), a.id, patch);
@@ -238,7 +246,7 @@ export const TOOLS: Tool[] = [
   tool({
     name: 'list_rules',
     description:
-      'Server rules and their parameters. Built-in rule names: late_for_place {grace_min}, distraction_during_focus {categories, kinds, cooldown_min}, no_checkin_missed {after_min, snooze_min}, play_limit {limit_min}. Actions take {alarm_in_min, label} with {place}/{title}/{app} placeholders.',
+      'Server rules and their parameters. Built-in rule names: late_for_place {grace_min}, distraction_during_focus {categories, kinds, cooldown_min}, solo_gaming {kinds, cooldown_min} (games outside a play block), no_checkin_missed {after_min, snooze_min}, play_limit {limit_min, exclude_play_blocks}, steps_goal {goal, after: "HH:MM"}. Actions take {alarm_in_min, label, alert: "alarm" | "notification"} with {place}/{title}/{app}/{short} placeholders.',
     input: z.object({}),
     readOnly: true,
     run: async (_a, ctx) => listRules(ctx.db),
@@ -247,7 +255,7 @@ export const TOOLS: Tool[] = [
     name: 'set_rule',
     description: 'Tune or toggle a rule (see list_rules for names and parameters). condition/action replace the stored JSON when given.',
     input: z.object({
-      name: z.enum(['late_for_place', 'distraction_during_focus', 'no_checkin_missed', 'play_limit']),
+      name: z.enum(['late_for_place', 'distraction_during_focus', 'solo_gaming', 'no_checkin_missed', 'play_limit', 'steps_goal']),
       condition: z.record(z.string(), z.unknown()).optional(),
       action: z.record(z.string(), z.unknown()).optional(),
       enabled: z.boolean().optional(),

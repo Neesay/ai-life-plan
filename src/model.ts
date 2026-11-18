@@ -12,7 +12,17 @@ export const EVENT_TYPES = [
   'app_close',
   'alarm_fired',
   'sync',
+  'steps',
 ] as const;
+export const ALERTS = ['alarm', 'notification', 'none'] as const;
+export type Alert = (typeof ALERTS)[number];
+export const alertSchema = z
+  .enum(ALERTS)
+  .describe("How this block's reminders arrive: 'alarm' = full-screen AlarmKit alarm (breaks Silent), 'notification' = normal notification (obeys Silent), 'none'.");
+export const quietSchema = z
+  .boolean()
+  .describe('While this block runs, every alarm that would ring is downgraded to a silent-mode notification (lectures, meetings, events).');
+
 export const SOURCES = ['app', 'shortcut', 'server', 'claude'] as const;
 export const CHECKIN_ACTIONS = ['on_it', 'snooze', 'skip', 'done'] as const;
 
@@ -50,6 +60,8 @@ export const templateItem = z.object({
   alarm_offsets_min: offsetsSchema.optional(),
   alarm_label: z.string().max(80).optional(),
   required_place: z.string().max(60).nullish(),
+  alert: alertSchema.optional(),
+  quiet: quietSchema.optional(),
 });
 export type TemplateItem = z.infer<typeof templateItem>;
 

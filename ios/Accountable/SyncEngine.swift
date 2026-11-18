@@ -32,10 +32,13 @@ final class SyncEngine: ObservableObject {
             let response = try await APIClient().schedule()
             Store.save(response, "schedule.json")
             schedule = response
+            var booked = 0
             if AlarmScheduler.authorizationState == .authorized {
-                bookedCount = try await AlarmScheduler.reconcile(with: response.alarms)
-                UserDefaults.standard.set(bookedCount, forKey: "bookedCount")
+                booked += try await AlarmScheduler.reconcile(with: response.alarms)
             }
+            booked += await NotificationScheduler.reconcile(with: response.alarms.filter { !$0.isAlarm })
+            bookedCount = booked
+            UserDefaults.standard.set(bookedCount, forKey: "bookedCount")
             lastSync = Date()
             UserDefaults.standard.set(lastSync, forKey: "lastSync")
             lastError = nil
@@ -85,6 +88,12 @@ final class SyncEngine: ObservableObject {
         switch action {
         case "on_it", "skip":
             AlarmScheduler.cancelRemaining(forBlock: block.id)
+        case "snooze" where block.alert == "notification" || block.quiet == true:
+            await NotificationScheduler.scheduleLocal(
+                title: "\(block.alarmLabel) · snoozed",
+                blockId: block.id,
+                in: TimeInterval(AlarmScheduler.snoozeMinutes * 60)
+            )
         case "snooze":
             try? await AlarmScheduler.scheduleLocal(
                 label: "\(block.alarmLabel) · snoozed",

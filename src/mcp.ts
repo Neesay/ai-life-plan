@@ -12,7 +12,9 @@ export const INSTRUCTIONS = `You are the planner for one person's accountability
 - Every block's alarm offsets become full-screen iPhone alarms that break through Silent/Focus. They reach the phone only at its next sync (app open, background refresh, Shortcut at 07:30/12:30/17:30/21:30, or geofence), so plan changes at least ~1h ahead when possible; the phone books 48h ahead.
 - Start each session with get_today and get_notes; end it with add_note explaining what you changed and why.
 - Statuses: planned → done (checked in "On it" or arrived at required place) / skipped (user said skip) / missed (no check-in 30 min after start). move_block re-arms a block.
-- Rule firings (late, distraction, play limit) appear as notes by 'system' and as short 'rule' blocks.
+- alert: 'alarm' (full-screen, breaks Silent) or 'notification' (obeys Silent). quiet: true on lectures/meetings/events turns any alarm firing during them into a notification, so nothing loud goes off in class.
+- Category 'play' blocks are friend-gaming time; games opened outside them trigger solo_gaming. A 'steps' event (payload.count) arrives from a Shortcut each evening.
+- Rule firings (late, distraction, solo gaming, play limit, steps) appear as notes by 'system' and as short 'rule' blocks.
 - Be firm but realistic: reschedule missed essentials (gym, study) into real free slots instead of stacking them.`;
 
 type JsonRpcId = string | number | null;

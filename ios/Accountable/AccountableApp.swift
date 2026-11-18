@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct AccountableApp: App {
@@ -6,6 +7,8 @@ struct AccountableApp: App {
     @StateObject private var engine = SyncEngine.shared
 
     init() {
+        UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
+        NotificationScheduler.registerCategories()
         Task {
             await LocationMonitor.shared.start()
             await EventQueue.shared.flush()
@@ -25,6 +28,7 @@ struct AccountableApp: App {
             if phase == .active {
                 Task {
                     await AlarmScheduler.requestAuthorization()
+                    _ = await NotificationScheduler.requestAuthorization()
                     await engine.sync(reason: "foreground")
                 }
             }
