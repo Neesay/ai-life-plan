@@ -20,7 +20,7 @@ export const alertSchema = z
   .enum(ALERTS)
   .describe("How this block's reminders arrive: 'alarm' = full-screen AlarmKit alarm (breaks Silent), 'notification' = normal notification (obeys Silent), 'none'.");
 export const quietSchema = z
-  .boolean()
+  .union([z.boolean(), z.stringbool()])
   .describe('While this block runs, every alarm that would ring is downgraded to a silent-mode notification (lectures, meetings, events).');
 
 export const SOURCES = ['app', 'shortcut', 'server', 'claude'] as const;
